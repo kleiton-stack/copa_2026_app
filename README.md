@@ -55,8 +55,20 @@ huggingface.co → New Space → SDK **Streamlit** → suba os 3 arquivos. Tamb�
 
 - **Barra lateral:** ajuste nº de simulações, rho (Dixon-Coles), peso do prior,
   sensibilidade ao rating e os boosts. O modelo re-roda com cache.
-- **Abas:** probabilidades por grupo, ranking geral, jogos restantes, caminho
-  no mata-mata (escolha a seleção), forças estimadas e edição dos ratings FIFA.
+- **Abas:** probabilidades por grupo, ranking geral, jogos restantes,
+  **backtesting**, caminho no mata-mata (escolha a seleção), forças estimadas
+  e edição dos ratings FIFA.
+
+### Backtesting (fora da amostra / walk-forward)
+
+A aba **🔎 Backtesting** mostra o que o modelo *previa* x o que realmente
+aconteceu nos jogos já disputados. É honesto: cada jogo é previsto por um modelo
+treinado **apenas com as rodadas anteriores** (a rodada 1 usa só o rating), então
+o modelo nunca enxerga o resultado que está tentando prever. Métricas: acurácia
+do 1X2, Brier score, log-loss e erro médio de gols, além de tabela jogo a jogo.
+
+> Terminologia: o mata-mata de 48 seleções começa nos **16 avos de final**
+> (32 times, no código `R32`), seguido de oitavas, quartas, semi e final.
 
 ## Notas metodológicas
 

@@ -47,6 +47,12 @@ def roda_grupos(rating_tuple, n_sim, dc_rho, w_prior, c, host_boost, opp_adjust)
 
 
 @st.cache_data(show_spinner=False)
+def roda_backtest(rating_tuple, dc_rho, w_prior, c, host_boost, opp_adjust):
+    m = build_modelo(rating_tuple, 5_000, dc_rho, w_prior, c, host_boost, opp_adjust)
+    return m.backtest()
+
+
+@st.cache_data(show_spinner=False)
 def roda_path(rating_tuple, n_sim, dc_rho, w_prior, c, host_boost, opp_adjust, time):
     m = build_modelo(rating_tuple, n_sim, dc_rho, w_prior, c, host_boost, opp_adjust)
     bar = st.progress(0.0, text=f"Simulando o caminho de {time}...")
@@ -95,8 +101,10 @@ st.title("⚽ Modelo Preditivo — Copa do Mundo 2026")
 st.caption("Simulacao de Monte Carlo a partir dos resultados ja disputados. "
            "Probabilidades de classificacao por grupo, melhores terceiros e caminho no mata-mata.")
 
-aba_grupos, aba_ranking, aba_jogos, aba_path, aba_forcas, aba_ratings = st.tabs(
-    ["🏁 Por grupo", "📊 Ranking geral", "🎲 Jogos restantes", "🇧🇷 Caminho de um time", "💪 Forcas", "✏️ Ratings"]
+(aba_grupos, aba_ranking, aba_jogos, aba_backtest,
+ aba_path, aba_forcas, aba_ratings) = st.tabs(
+    ["🏁 Por grupo", "📊 Ranking geral", "🎲 Jogos restantes", "🔎 Backtesting",
+     "🇧🇷 Caminho de um time", "💪 Forcas", "✏️ Ratings"]
 )
 
 dados = roda_grupos(*params)
@@ -136,6 +144,46 @@ with aba_jogos:
     st.subheader("Probabilidade dos jogos restantes da fase de grupos")
     st.dataframe(pd.DataFrame(dados["restantes"]), hide_index=True, use_container_width=True, height=600)
 
+# ----- Backtesting ---------------------------------------------------------
+with aba_backtest:
+    st.subheader("Backtesting — o que o modelo previa x o que aconteceu")
+    st.caption(
+        "Validacao **fora da amostra (walk-forward)**: cada jogo ja disputado foi previsto "
+        "usando um modelo treinado apenas com as rodadas anteriores. A rodada 1 usa so o "
+        "rating (sem jogos previos), entao o modelo nunca 've' o resultado que esta prevendo."
+    )
+    bt = roda_backtest(rating_tuple, dc_rho, w_prior, c, host_boost, opp_adjust)
+    met = bt["metrics"]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Acertos de resultado (1X2)", f"{met['acuracia']}%",
+              help=f"{met['acertos']} de {met['n']} jogos com o favorito do modelo correto.")
+    c2.metric("Brier score", met["brier"], help="Erro das probabilidades (0 = perfeito). Menor e melhor.")
+    c3.metric("Log-loss", met["logloss"], help="Penaliza confianca errada. Menor e melhor.")
+    c4.metric("Erro medio de gols/time", met["mae_gols"], help="Diferenca media entre gols esperados e reais.")
+
+    st.markdown("#### Acuracia por rodada")
+    df_rod = pd.DataFrame(bt["por_rodada"])
+    cg1, cg2 = st.columns([1, 2])
+    with cg1:
+        st.dataframe(df_rod, hide_index=True, use_container_width=True)
+    with cg2:
+        st.bar_chart(df_rod.set_index("Rodada")["Acuracia %"])
+    st.caption("A rodada 1 e' so rating (chute inicial); o modelo aprende e melhora nas rodadas seguintes.")
+
+    st.markdown("#### Jogo a jogo: previsto x real")
+    df_bt = pd.DataFrame(bt["jogos"])
+    st.dataframe(
+        df_bt.style.apply(
+            lambda row: ["background-color: #1b3a1b" if row["Acertou"] == "✅"
+                         else "background-color: #3a1b1b"] * len(row),
+            axis=1,
+        ),
+        hide_index=True, use_container_width=True, height=600,
+    )
+    st.caption("V1 = vitoria do 1o time do confronto · V2 = vitoria do 2o time. "
+               "'Favorito' = resultado mais provavel segundo o modelo naquele momento.")
+
 # ----- Caminho de um time --------------------------------------------------
 with aba_path:
     st.subheader("Caminho no mata-mata")
@@ -147,7 +195,7 @@ with aba_path:
         n = res["n_valid"]
         st.caption(f"{n:,} simulacoes validas".replace(",", "."))
 
-        fases = [("R32", "Classificar (Round of 32)"), ("R16", "Oitavas"),
+        fases = [("R32", "16 avos"), ("R16", "Oitavas"),
                  ("QF", "Quartas"), ("SF", "Semifinal"), ("FINAL", "Final"),
                  ("CAMPEAO", "Campeao"), ("VICE", "Vice")]
         cols = st.columns(len(fases))
@@ -159,6 +207,8 @@ with aba_path:
                                 for k, label in fases])
         st.bar_chart(df_fase.set_index("Fase")["%"])
 
+        nome_fase = {"R32": "16 avos", "R16": "Oitavas", "QF": "Quartas",
+                     "SF": "Semifinal", "FINAL": "Final"}
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("#### Adversarios mais provaveis por fase")
@@ -167,7 +217,7 @@ with aba_path:
                 if denom == 0:
                     continue
                 top = res["opponent_by_stage"][stage].most_common(5)
-                st.markdown(f"**{stage}**")
+                st.markdown(f"**{nome_fase[stage]}**")
                 st.dataframe(pd.DataFrame(
                     [{"Adversario": o, "%": round(cc / denom * 100, 1)} for o, cc in top]),
                     hide_index=True, use_container_width=True)

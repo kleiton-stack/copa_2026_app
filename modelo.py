@@ -447,6 +447,97 @@ class ModeloCopa:
             "Classif. %": round(float(qual_probs[t]) * 100, 1),
         } for t in ordem]
 
+    # ----- backtesting (walk-forward / out-of-sample) ---------------------
+    def _rodada_dos_fixtures(self):
+        """Mapeia cada confronto (par) para sua rodada (1, 2 ou 3) na fase de grupos."""
+        pair_round = {}
+        for jogos in self.fixtures.values():
+            for i, (a, b) in enumerate(jogos):
+                pair_round[self._par(a, b)] = i // 2 + 1
+        return pair_round
+
+    def backtest(self):
+        """
+        Backtesting honesto (walk-forward / fora da amostra):
+
+        Cada jogo ja disputado e' previsto usando um modelo treinado SOMENTE com
+        os resultados das rodadas anteriores. A rodada 1 e' prevista apenas pelo
+        rating (nenhum jogo anterior), evitando que o modelo "veja" o proprio
+        resultado que esta tentando prever.
+
+        Retorna {"jogos": [...], "metrics": {...}, "por_rodada": [...]}.
+        """
+        pair_round = self._rodada_dos_fixtures()
+        by_round = defaultdict(list)
+        for a, ga, b, gb in self.resultados:
+            r = pair_round.get(self._par(a, b))
+            if r is not None:
+                by_round[r].append((a, ga, b, gb))
+
+        rows = []
+        brier_sum = logloss_sum = mae_gols = 0.0
+        acertos = n = 0
+        acc_por_rodada = defaultdict(lambda: [0, 0])  # rodada -> [acertos, total]
+
+        for r in sorted(by_round):
+            subset = [res for rr in by_round if rr < r for res in by_round[rr]]
+            # Modelo treinado so com rodadas anteriores (fora da amostra).
+            temp = ModeloCopa(self.rating, self.fixtures, subset, self.cfg)
+
+            for a, ga, b, gb in by_round[r]:
+                la, lb, ea, eb, pa, pe, pb = temp.prob_jogo(a, b)
+                probs = {"A": float(pa), "E": float(pe), "B": float(pb)}
+
+                if ga > gb:
+                    actual = "A"
+                elif gb > ga:
+                    actual = "B"
+                else:
+                    actual = "E"
+
+                pred = max(probs, key=probs.get)
+                acertou = pred == actual
+                rotulo = {"A": a, "E": "Empate", "B": b}
+
+                acertos += int(acertou)
+                n += 1
+                acc_por_rodada[r][0] += int(acertou)
+                acc_por_rodada[r][1] += 1
+                for k in ("A", "E", "B"):
+                    y = 1.0 if k == actual else 0.0
+                    brier_sum += (probs[k] - y) ** 2
+                logloss_sum += -math.log(max(probs[actual], 1e-12))
+                mae_gols += abs(float(ea) - ga) + abs(float(eb) - gb)
+
+                rows.append({
+                    "Rodada": r,
+                    "Grupo": self.team_to_group[a],
+                    "Confronto": f"{a} x {b}",
+                    "Prev. V1 %": round(probs["A"] * 100, 1),
+                    "Prev. Empate %": round(probs["E"] * 100, 1),
+                    "Prev. V2 %": round(probs["B"] * 100, 1),
+                    "Favorito": rotulo[pred],
+                    "Gols esp.": f"{float(ea):.1f} x {float(eb):.1f}",
+                    "Placar real": f"{ga} x {gb}",
+                    "Resultado": rotulo[actual],
+                    "Acertou": "✅" if acertou else "❌",
+                })
+
+        metrics = {
+            "n": n,
+            "acertos": acertos,
+            "acuracia": round(acertos / n * 100, 1) if n else 0.0,
+            "brier": round(brier_sum / n, 4) if n else None,
+            "logloss": round(logloss_sum / n, 4) if n else None,
+            "mae_gols": round(mae_gols / (2 * n), 2) if n else None,
+        }
+        por_rodada = [
+            {"Rodada": r, "Acertos": v[0], "Jogos": v[1],
+             "Acuracia %": round(v[0] / v[1] * 100, 1) if v[1] else 0.0}
+            for r, v in sorted(acc_por_rodada.items())
+        ]
+        return {"jogos": rows, "metrics": metrics, "por_rodada": por_rodada}
+
     # ----- path do Brasil (mata-mata) -------------------------------------
     @staticmethod
     def _sigmoid(x):
