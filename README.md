@@ -25,28 +25,31 @@ Abre em `http://localhost:8501`.
 
 É o "RPubs do Python": grátis, feito pra Streamlit, link público fixo.
 
-1. **Crie um repositório no GitHub** com estes 3 arquivos (`app.py`,
-   `modelo.py`, `requirements.txt`). Pelo navegador: github.com → New
-   repository → arraste os arquivos. Ou pelo terminal:
+Este projeto já está no GitHub (repositório **público**):
+**https://github.com/kleiton-stack/copa_2026_app**
 
-   ```bash
-   cd copa2026_app
-   git init && git add . && git commit -m "App Copa 2026"
-   git branch -M main
-   git remote add origin https://github.com/SEU_USUARIO/copa2026.git
-   git push -u origin main
-   ```
+1. Acesse **https://share.streamlit.io** e entre com sua conta GitHub.
 
-2. Acesse **https://share.streamlit.io** e entre com sua conta GitHub.
+2. **New app** → **Deploy a public app from GitHub** e preencha:
+   - **Repository:** `kleiton-stack/copa_2026_app`
+   - **Branch:** `main`
+   - **Main file path:** `app.py`
 
-3. **New app** → escolha o repositório, branch `main`, arquivo `app.py` → **Deploy**.
+3. **Deploy**. Em ~1 min você recebe um link público tipo
+   `https://....streamlit.app` para compartilhar. 🎉
 
-4. Em ~1 min você recebe um link público tipo
-   `https://copa2026.streamlit.app` para compartilhar. 🎉
-
-> Toda vez que você der `git push`, o app atualiza sozinho.
-> No plano grátis o app "dorme" após inatividade e leva alguns segundos
+> Como o repositório é **público**, o app roda nos servidores do Streamlit 24/7 —
+> não precisa do seu PC ligado. Toda vez que você der `git push`, o app atualiza
+> sozinho. No plano grátis ele "dorme" após inatividade e leva alguns segundos
 > para acordar na primeira visita — normal.
+
+### Atualizar o app
+
+Edite os arquivos e rode, no diretório do projeto:
+
+```bash
+git add -A && git commit -m "atualiza resultados" && git push
+```
 
 ### Alternativa: Hugging Face Spaces
 huggingface.co → New Space → SDK **Streamlit** → suba os 3 arquivos. Também grátis.
